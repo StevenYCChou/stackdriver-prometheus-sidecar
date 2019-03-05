@@ -34,6 +34,161 @@ type sampleBuilder struct {
 	series seriesGetter
 }
 
+
+type sampleSeries struct {
+	Samples       []tsdb.RefSample
+	SeriesEntries *seriesCacheEntry
+}
+
+func (b *sampleBuilder) extractSampleGroups(ctx context.Context, samples []tsdb.RefSample) []*sampleSeries {
+	result := []*sampleSeries{}
+	beginIdx := 0
+	var beginCacheEntry *seriesCacheEntry
+	isPreviousEntryHistogram := false
+	for idx, sample := range samples {
+		// add retry here
+		cacheEntry, ok, err := b.series.get(ctx, sample.Ref)
+		if err != nil {
+			// TODO: handle error correctly
+			continue
+		}
+		if !ok {
+			result = append(result, nil)
+			continue
+		}
+
+		if isPreviousEntryHistogram {
+			if cacheEntry.metadata.Type == textparse.MetricTypeHistogram {
+				name := cacheEntry.lset.Get("__name__")
+				// The series matches if it has the same base name, the remainder is a valid histogram suffix,
+				// and the labels aside from the le and __name__ label match up.
+				if !strings.HasPrefix(name, beginCacheEntry.metadata.Metric) ||
+					!histogramLabelsEqual(cacheEntry.lset, beginCacheEntry.lset) ||
+					(idx > 0 && sample.T != samples[idx-1].T) {
+					result = append(result, &sampleSeries{
+						Samples:       samples[beginIdx:idx],
+						SeriesEntries: beginCacheEntry,
+					})
+					beginIdx = idx
+					beginCacheEntry = cacheEntry
+				}
+			} else {
+					result = append(result,
+					&sampleSeries{
+						Samples:       samples[beginIdx:idx],
+						SeriesEntries: beginCacheEntry,
+					}, &sampleSeries{
+						Samples:       samples[idx:idx+1],
+						SeriesEntries: cacheEntry,
+					})
+				// append previous group to the list
+				// append this cacheEntry to the list
+				isPreviousEntryHistogram = false
+				beginIdx = idx+1
+				beginCacheEntry = nil
+			}
+		} else {
+			// when it is histogram type, we need to group multiple samples
+			if cacheEntry.metadata.Type == textparse.MetricTypeHistogram {
+				// start the new group
+				isPreviousEntryHistogram = true
+				beginIdx = idx
+				beginCacheEntry = cacheEntry
+			} else {
+				// append this cacheEntry to the list
+				result = append(result, &sampleSeries{
+					Samples:       samples[idx:idx+1],
+					SeriesEntries: cacheEntry,
+				})
+				beginIdx = idx+1
+				beginCacheEntry = nil
+			}
+		}
+	}
+	return result
+}
+
+func (b *sampleBuilder) parseSampleSeries(ctx context.Context, ss *sampleSeries) (*monitoring_pb.TimeSeries, uint64, error) {
+	if ss == nil {
+		return nil, 0, nil
+	}
+
+	ts := *ss.SeriesEntries.proto
+
+	point := &monitoring_pb.Point{
+		Interval: &monitoring_pb.TimeInterval{
+			EndTime: getTimestamp(ss.Samples[0].T),
+		},
+	}
+	ts.Points = append(ts.Points, point)
+
+	var resetTimestamp int64
+	var v float64
+	var ok bool
+	firstSample := ss.Samples[0]
+	switch ss.SeriesEntries.metadata.Type {
+	case textparse.MetricTypeCounter:
+
+		resetTimestamp, v, ok = b.series.getResetAdjusted(firstSample.Ref, firstSample.T, firstSample.V)
+		if !ok {
+			return nil, 0, nil
+		}
+		point.Interval.StartTime = getTimestamp(resetTimestamp)
+		point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{v}}
+
+	case textparse.MetricTypeGauge, textparse.MetricTypeUnknown:
+		point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{firstSample.V}}
+
+	case textparse.MetricTypeSummary:
+		switch ss.SeriesEntries.suffix {
+		case metricSuffixSum:
+			var v float64
+			resetTimestamp, v, ok = b.series.getResetAdjusted(firstSample.Ref, firstSample.T, firstSample.V)
+			if !ok {
+				return nil, 0, nil
+			}
+			point.Interval.StartTime = getTimestamp(resetTimestamp)
+			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{v}}
+		case metricSuffixCount:
+			var v float64
+			resetTimestamp, v, ok = b.series.getResetAdjusted(firstSample.Ref, firstSample.T, firstSample.V)
+			if !ok {
+				return nil, 0, nil
+			}
+			point.Interval.StartTime = getTimestamp(resetTimestamp)
+			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_Int64Value{int64(v)}}
+		case "": // Actual quantiles.
+			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{firstSample.V}}
+		default:
+			return nil, 0, errors.Errorf("unexpected metric name suffix %q", ss.SeriesEntries.suffix)
+		}
+
+	case textparse.MetricTypeHistogram:
+		// We pass in the original lset for matching since Prometheus's target label must
+		// be the same as well.
+		var v *distribution_pb.Distribution
+		var err error
+		v, resetTimestamp, _, err = b.buildDistribution(ctx, ss.SeriesEntries.metadata.Metric, ss.SeriesEntries.lset, ss.Samples)
+		if v == nil || err != nil {
+			return nil, 0, err
+		}
+		point.Interval.StartTime = getTimestamp(resetTimestamp)
+		point.Value = &monitoring_pb.TypedValue{
+			Value: &monitoring_pb.TypedValue_DistributionValue{v},
+		}
+		return &ts, 0, nil
+
+	default:
+		return nil, 0, errors.Errorf("unexpected metric type %s", ss.SeriesEntries.metadata.Type)
+	}
+
+	if !b.series.updateSampleInterval(ss.SeriesEntries.hash, resetTimestamp, ss.Samples[0].T) {
+		return nil, 0, nil
+	}
+	return &ts, 0, nil
+}
+
+
 // next extracts the next sample from the TSDB input sample list and returns
 // the remainder of the input.
 func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*monitoring_pb.TimeSeries, uint64, []tsdb.RefSample, error) {

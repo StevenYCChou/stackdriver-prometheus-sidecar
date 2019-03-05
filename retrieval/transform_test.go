@@ -631,7 +631,6 @@ func TestSampleBuilder(t *testing.T) {
 
 	for i, c := range cases {
 		t.Logf("Test case %d", i)
-
 		var s *monitoring_pb.TimeSeries
 		var err error
 		var result []*monitoring_pb.TimeSeries
@@ -643,8 +642,10 @@ func TestSampleBuilder(t *testing.T) {
 
 		b := &sampleBuilder{series: series}
 
-		for k := 0; len(c.input) > 0; k++ {
-			s, _, c.input, err = b.next(context.Background(), c.input)
+		ctx := context.Background()
+		sampleSeriesCollection := b.extractSampleGroups(ctx, c.input)
+		for _, sampleSeries := range sampleSeriesCollection {
+			s, _, err = b.parseSampleSeries(ctx, sampleSeries)
 			if err != nil {
 				break
 			}
