@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"runtime"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
@@ -67,6 +68,12 @@ type apiResponseData struct {
 type apiResponseDataResult struct {
 	Metric labels.Labels `json:"metric"`
 }
+
+const (
+	metricSuffixBucket = "_bucket"
+	metricSuffixSum    = "_sum"
+	metricSuffixCount  = "_count"
+)
 
 func main() {
 	if os.Getenv("DEBUG") != "" {
@@ -149,7 +156,7 @@ func main() {
 
 	var res apiResponse
 	err = json.Unmarshal(body, &res)
-	fmt.Println(res)
+	// fmt.Println(res)
 
 	targetsURL, err := cfg.prometheusURL.Parse(targets.DefaultAPIEndpoint)
 	if err != nil {
@@ -160,18 +167,19 @@ func main() {
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 	targetCache := targets.NewCache(logger, httpClient, targetsURL)
 
+	// pass 1: consume all the results. drop target labels from all the labels. also drop __name__ label
 	metricNameToLabels := map[string]map[string]bool{}
 	for _, result := range res.Data.Result {
-		// fmt.Println(result)
 		target, err := targetCache.Get(ctx, result.Metric)
 		if err != nil {
 			level.Info(logger).Log("retrieving target failed")
 		}
 
 		metricLabels := targets.DropTargetLabels(result.Metric, target.Labels)
-		fmt.Println(metricLabels)
+		// fmt.Println(metricLabels)
 
 		metricName := result.Metric.Get("__name__")
+		// fmt.Println(metricName)
 		if _, ok := metricNameToLabels[metricName]; !ok {
 			metricNameToLabels[metricName] = map[string]bool{}
 		}
@@ -183,15 +191,93 @@ func main() {
 		}
 	}
 
-	// for k, v := range(metricNameToLabels) {
-	// 	fmt.Println(k)
-	// 	for k2, _ := range(v) {
-	// 		fmt.Println(k2)
-	// 	}
-	// }
-	fmt.Println(metricNameToLabels)
+	// pass 2: check whether histogram exists. if exists, construct a metric without postfix, remove le from labels, and group all the labels.
+	metricNameToLabelsWithoutHistogram := map[string]map[string]bool{}
+	for k, labels := range(metricNameToLabels) {
+		var metricPrefix string
+		if strings.HasSuffix(k, metricSuffixBucket) {
+			metricPrefix = k[:len(k)-len(metricSuffixBucket)]
+		}
+		if strings.HasSuffix(k, metricSuffixCount) {
+			metricPrefix = k[:len(k)-len(metricSuffixCount)]
+		}
+		if strings.HasSuffix(k, metricSuffixSum) {
+			metricPrefix = k[:len(k)-len(metricSuffixSum)]
+		}
+
+		if len(metricPrefix) != 0 {
+			allDistributionMetricNames := []string{
+				fmt.Sprintf("%s%s", metricPrefix, metricSuffixBucket),
+				fmt.Sprintf("%s%s", metricPrefix, metricSuffixCount),
+				fmt.Sprintf("%s%s", metricPrefix, metricSuffixSum),
+			}
+			hasDistribution := true
+			for _, s := range allDistributionMetricNames {
+				if _, ok := metricNameToLabels[s]; !ok {
+					hasDistribution = false
+				} 
+			}
+
+			if hasDistribution {
+				fmt.Println("distribution metric name:", metricPrefix)
+				if _, ok := metricNameToLabelsWithoutHistogram[metricPrefix]; !ok {
+					metricNameToLabelsWithoutHistogram[metricPrefix] = map[string]bool{}
+				}
+				for l, _ := range(labels) {
+					if l != "le" {
+						fmt.Println("distribution labels:", l)
+						metricNameToLabelsWithoutHistogram[metricPrefix][l] = true
+					}
+				}
+				continue
+			}
+		}
+
+		if _, ok := metricNameToLabelsWithoutHistogram[k]; !ok {
+			metricNameToLabelsWithoutHistogram[k] = map[string]bool{}
+		}
+		for l, _ := range(labels) {
+			metricNameToLabelsWithoutHistogram[k][l] = true
+		}
+
+	}
+
+	// pass 3: reconstruct as metric_name -> slice of label keys 
+	metricNameToLabelNames := map[string][]string{}
+	for k, v := range(metricNameToLabelsWithoutHistogram) {
+		labels := []string{}
+		for k2, _ := range(v) {
+			labels = append(labels, k2)
+		}
+		metricNameToLabelNames[k] = labels
+		fmt.Println("metric name: ", k)
+		fmt.Println("labels: ", labels)
+	}
+	// TODO:
+	// 1-1) find out histogram type.
+	//  rule:
+	//    if it has _bucket or _sum or _count as suffix, go into checking function
+	//         if all 3 check exists return true and the metric name
+	//         if true, return metric name and query all metrics and stuff the labels
+	//    if yes, then create a new metric with the metric name without suffix, and remove le label
+	// 1-2) construct the metric name & use 'distribution' type
+	// 1-3) remove le from labels 
+    
 
 	level.Info(logger).Log("msg", "See you next time!")
+}
+
+func stripComplexMetricSuffix(name string) (string, string, bool) {
+	if strings.HasSuffix(name, metricSuffixBucket) {
+		return name[:len(name)-len(metricSuffixBucket)], metricSuffixBucket, true
+	}
+	if strings.HasSuffix(name, metricSuffixCount) {
+		return name[:len(name)-len(metricSuffixCount)], metricSuffixCount, true
+	}
+	if strings.HasSuffix(name, metricSuffixSum) {
+		return name[:len(name)-len(metricSuffixSum)], metricSuffixSum, true
+	}
+	return name, "", false
 }
 
 func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadata, error) {
