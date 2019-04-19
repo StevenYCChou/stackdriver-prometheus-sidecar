@@ -156,8 +156,8 @@ func main() {
 
 	var res apiResponse
 	err = json.Unmarshal(body, &res)
-	// fmt.Println(res)
 
+	// create target cache
 	targetsURL, err := cfg.prometheusURL.Parse(targets.DefaultAPIEndpoint)
 	if err != nil {
 		panic(err)
@@ -167,7 +167,15 @@ func main() {
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 	targetCache := targets.NewCache(logger, httpClient, targetsURL)
 
+	// create metadata cache
+	metadataURL, err := cfg.prometheusURL.Parse(metadata.DefaultEndpointPath)
+	if err != nil {
+		panic(err)
+	}
+	metadataCache := metadata.NewCache(httpClient, metadataURL, cfg.staticMetadata)
+
 	// pass 1: consume all the results. drop target labels from all the labels. also drop __name__ label
+	// also build up metadata cache
 	metricNameToLabels := map[string]map[string]bool{}
 	for _, result := range res.Data.Result {
 		target, err := targetCache.Get(ctx, result.Metric)
@@ -179,6 +187,10 @@ func main() {
 		// fmt.Println(metricLabels)
 
 		metricName := result.Metric.Get("__name__")
+
+		jobName := result.Metric.Get("job")
+		instanceName := result.Metric.Get("instance")
+		metadataCache.Get(ctx, jobName, instanceName, metricName)
 		// fmt.Println(metricName)
 		if _, ok := metricNameToLabels[metricName]; !ok {
 			metricNameToLabels[metricName] = map[string]bool{}
