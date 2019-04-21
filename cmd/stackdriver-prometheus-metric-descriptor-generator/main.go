@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sort"
 	"runtime"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
@@ -67,6 +68,14 @@ type apiResponseData struct {
 
 type apiResponseDataResult struct {
 	Metric labels.Labels `json:"metric"`
+}
+
+type metricDescriptor struct {
+	Name string
+	Description string
+	MetricKind string
+	ValueType string
+	Labels []string
 }
 
 const (
@@ -140,7 +149,8 @@ func main() {
 
 	url := promClient.URL("api/v1/query", nil)
 	q := url.Query()
-	q.Set("query", "{__name__=~\".+\"}")
+	//q.Set("query", "{__name__=~\".+\"}")
+	q.Set("query", "{job=\"prometheus\"}")
 	url.RawQuery = q.Encode()
 	fmt.Println(url.String())
 
@@ -174,107 +184,105 @@ func main() {
 	}
 	metadataCache := metadata.NewCache(httpClient, metadataURL, cfg.staticMetadata)
 
+
+	metricDescriptors := map[string]*metricDescriptor{}
 	// pass 1: consume all the results. drop target labels from all the labels. also drop __name__ label
 	// also build up metadata cache
-	metricNameToLabels := map[string]map[string]bool{}
 	for _, result := range res.Data.Result {
 		target, err := targetCache.Get(ctx, result.Metric)
 		if err != nil {
 			level.Info(logger).Log("retrieving target failed")
 		}
 
-		metricLabels := targets.DropTargetLabels(result.Metric, target.Labels)
-		// fmt.Println(metricLabels)
-
 		metricName := result.Metric.Get("__name__")
-
 		jobName := result.Metric.Get("job")
 		instanceName := result.Metric.Get("instance")
-		metadataCache.Get(ctx, jobName, instanceName, metricName)
-		// fmt.Println(metricName)
-		if _, ok := metricNameToLabels[metricName]; !ok {
-			metricNameToLabels[metricName] = map[string]bool{}
+
+		// get all the Stackdriver metric metadata (name, description, ValueType, MetricKind)
+		// TODO(ycchou): extract this function as helper function from retrieve package.
+		metadata, err := metadataCache.Get(ctx, jobName, instanceName, metricName)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, errors.Wrapf(err, "Error retrieving metadata."))
+		}
+		var suffix string
+		var baseMetricName string
+		if metadata == nil {
+			// The full name didn't turn anything up. Check again in case it's a summary or histogram without
+			// the metric name suffix.
+			var ok bool
+			if baseMetricName, suffix, ok = stripComplexMetricSuffix(metricName); ok {
+				metadata, err = metadataCache.Get(ctx, jobName, instanceName, baseMetricName)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, errors.Wrapf(err, "Error retrieving metadata."))
+				}
+			}
+		}
+		md := metricDescriptor{
+			Name: metricName,
+			Description: metadata.Help,
+		}
+		switch metadata.Type {
+		case textparse.MetricTypeCounter:
+			md.MetricKind = "CUMULATIVE"
+			md.ValueType = "DOUBLE"
+		case textparse.MetricTypeGauge, textparse.MetricTypeUnknown:
+			md.MetricKind = "GAUGE"
+			md.ValueType = "DOUBLE"
+		case textparse.MetricTypeSummary:
+			switch suffix {
+			case metricSuffixSum:
+				md.MetricKind = "CUMULATIVE"
+				md.ValueType = "DOUBLE"
+			case metricSuffixCount:
+				md.MetricKind = "CUMULATIVE"
+				md.ValueType = "INT64"
+			case "": // Actual quantiles.
+				md.MetricKind = "GAUGE"
+				md.ValueType = "DOUBLE"
+			default:
+				fmt.Fprintln(os.Stderr, errors.Errorf("unexpected metric name suffix %q", suffix))
+			}
+		case textparse.MetricTypeHistogram:
+			md.Name = baseMetricName
+			md.MetricKind = "CUMULATIVE"
+			md.ValueType = "DISTRIBUTION"
+		default:
+			fmt.Fprintln(os.Stderr, errors.Errorf("unexpected metric type %s", metadata.Type))
+		}
+		if _, ok := metricDescriptors[md.Name]; !ok {
+			metricDescriptors[md.Name] = &md
+		}
+
+		metricLabels := targets.DropTargetLabels(result.Metric, target.Labels)
+		for _, label := range metricLabels {
+			if label.Name == "__name__" {
+				continue
+			}
 		}
 		for _, label := range metricLabels {
 			if label.Name == "__name__" {
 				continue
 			}
-			metricNameToLabels[metricName][label.Name] = true
-		}
-	}
-
-	// pass 2: check whether histogram exists. if exists, construct a metric without postfix, remove le from labels, and group all the labels.
-	metricNameToLabelsWithoutHistogram := map[string]map[string]bool{}
-	for k, labels := range(metricNameToLabels) {
-		var metricPrefix string
-		if strings.HasSuffix(k, metricSuffixBucket) {
-			metricPrefix = k[:len(k)-len(metricSuffixBucket)]
-		}
-		if strings.HasSuffix(k, metricSuffixCount) {
-			metricPrefix = k[:len(k)-len(metricSuffixCount)]
-		}
-		if strings.HasSuffix(k, metricSuffixSum) {
-			metricPrefix = k[:len(k)-len(metricSuffixSum)]
-		}
-
-		if len(metricPrefix) != 0 {
-			allDistributionMetricNames := []string{
-				fmt.Sprintf("%s%s", metricPrefix, metricSuffixBucket),
-				fmt.Sprintf("%s%s", metricPrefix, metricSuffixCount),
-				fmt.Sprintf("%s%s", metricPrefix, metricSuffixSum),
-			}
-			hasDistribution := true
-			for _, s := range allDistributionMetricNames {
-				if _, ok := metricNameToLabels[s]; !ok {
-					hasDistribution = false
-				} 
-			}
-
-			if hasDistribution {
-				fmt.Println("distribution metric name:", metricPrefix)
-				if _, ok := metricNameToLabelsWithoutHistogram[metricPrefix]; !ok {
-					metricNameToLabelsWithoutHistogram[metricPrefix] = map[string]bool{}
-				}
-				for l, _ := range(labels) {
-					if l != "le" {
-						fmt.Println("distribution labels:", l)
-						metricNameToLabelsWithoutHistogram[metricPrefix][l] = true
-					}
-				}
+			if label.Name == "le" && md.ValueType == "DISTRIBUTION" {
 				continue
 			}
+			lls := &metricDescriptors[md.Name].Labels
+			idx := sort.SearchStrings(*lls, label.Name)
+			if idx < len(*lls) && (*lls)[idx] == label.Name {
+				continue
+			}
+			*lls = append(*lls, label.Name)
 		}
-
-		if _, ok := metricNameToLabelsWithoutHistogram[k]; !ok {
-			metricNameToLabelsWithoutHistogram[k] = map[string]bool{}
-		}
-		for l, _ := range(labels) {
-			metricNameToLabelsWithoutHistogram[k][l] = true
-		}
-
 	}
 
-	// pass 3: reconstruct as metric_name -> slice of label keys 
-	metricNameToLabelNames := map[string][]string{}
-	for k, v := range(metricNameToLabelsWithoutHistogram) {
-		labels := []string{}
-		for k2, _ := range(v) {
-			labels = append(labels, k2)
-		}
-		metricNameToLabelNames[k] = labels
-		fmt.Println("metric name: ", k)
-		fmt.Println("labels: ", labels)
+	for k,v := range(metricDescriptors) {
+		fmt.Println("metricName: ", k)
+		fmt.Println("metricKind: ", v.MetricKind)
+		fmt.Println("ValueType: ", v.ValueType)
+		fmt.Println("Description: ", v.Description)
+		fmt.Println("Labels: ", v.Labels)
+		fmt.Println("----")
 	}
-	// TODO:
-	// 1-1) find out histogram type.
-	//  rule:
-	//    if it has _bucket or _sum or _count as suffix, go into checking function
-	//         if all 3 check exists return true and the metric name
-	//         if true, return metric name and query all metrics and stuff the labels
-	//    if yes, then create a new metric with the metric name without suffix, and remove le label
-	// 1-2) construct the metric name & use 'distribution' type
-	// 1-3) remove le from labels 
-    
 
 	level.Info(logger).Log("msg", "See you next time!")
 }
@@ -324,3 +332,4 @@ func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadat
 	}
 	return renameMapping, staticMetadata, nil
 }
+
