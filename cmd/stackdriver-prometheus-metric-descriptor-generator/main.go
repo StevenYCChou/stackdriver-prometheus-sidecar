@@ -275,12 +275,18 @@ func main() {
 		}
 	}
 
-	for k,v := range(metricDescriptors) {
-		fmt.Println("metricName: ", k)
-		fmt.Println("metricKind: ", v.MetricKind)
-		fmt.Println("ValueType: ", v.ValueType)
-		fmt.Println("Description: ", v.Description)
-		fmt.Println("Labels: ", v.Labels)
+	var sortedMetricNames []string
+	for k := range(metricDescriptors) {
+		sortedMetricNames = append(sortedMetricNames, k)
+	}
+	sort.Strings(sortedMetricNames)
+	for _, metricName := range(sortedMetricNames) {
+		md := metricDescriptors[metricName]
+		fmt.Println("metricName: ", md.Name)
+		fmt.Println("metricKind: ", md.MetricKind)
+		fmt.Println("ValueType: ", md.ValueType)
+		fmt.Println("Description: ", md.Description)
+		fmt.Println("Labels: ", md.Labels)
 		fmt.Println("----")
 	}
 
