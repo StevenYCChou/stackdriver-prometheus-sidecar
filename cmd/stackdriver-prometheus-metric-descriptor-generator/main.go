@@ -149,16 +149,13 @@ func main() {
 
 	url := promClient.URL("api/v1/query", nil)
 	q := url.Query()
-	//q.Set("query", "{__name__=~\".+\"}")
-	q.Set("query", "{job=\"prometheus\"}")
+	q.Set("query", "{__name__=~\".+\"}")
 	url.RawQuery = q.Encode()
-	fmt.Println(url.String())
 
 	req, err := http.NewRequest(http.MethodGet, url.String(), nil)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 	}
-	fmt.Println(req.URL)
 	_, body, err := promClient.Do(context.Background(), req)
 	if err != nil {
 		level.Error(logger).Log("err", err)
@@ -289,8 +286,6 @@ func main() {
 		fmt.Println("Labels: ", md.Labels)
 		fmt.Println("----")
 	}
-
-	level.Info(logger).Log("msg", "See you next time!")
 }
 
 func stripComplexMetricSuffix(name string) (string, string, bool) {
