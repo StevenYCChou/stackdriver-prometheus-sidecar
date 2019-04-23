@@ -376,12 +376,15 @@ func main() {
 	queueManager, err := stackdriver.NewQueueManager(
 		log.With(logger, "component", "queue_manager"),
 		config.DefaultQueueConfig,
-		&clientFactory{
-			logger:            log.With(logger, "component", "storage"),
-			projectIdResource: cfg.projectIdResource,
-			url:               cfg.stackdriverAddress,
-			timeout:           10 * time.Second,
+		&diskClientFactory{
+			FilePrefix: "/tmp/points",
 		},
+		// &clientFactory{
+		// 	logger:            log.With(logger, "component", "storage"),
+		// 	projectIdResource: cfg.projectIdResource,
+		// 	url:               cfg.stackdriverAddress,
+		// 	timeout:           10 * time.Second,
+		// },
 		tailer,
 	)
 	if err != nil {
@@ -540,24 +543,41 @@ func main() {
 	level.Info(logger).Log("msg", "See you next time!")
 }
 
-type clientFactory struct {
-	logger            log.Logger
-	projectIdResource string
-	url               *url.URL
-	timeout           time.Duration
+// type clientFactory struct {
+// 	logger            log.Logger
+// 	projectIdResource string
+// 	url               *url.URL
+// 	timeout           time.Duration
+// }
+
+// func (f *clientFactory) New() stackdriver.StorageClient {
+// 	return stackdriver.NewClient(&stackdriver.ClientConfig{
+// 		Logger:    f.logger,
+// 		ProjectId: f.projectIdResource,
+// 		URL:       f.url,
+// 		Timeout:   f.timeout,
+// 	})
+// }
+
+// func (f *clientFactory) Name() string {
+// 	return f.url.String()
+// }
+
+type diskClientFactory struct {
+	FilePrefix string
 }
 
-func (f *clientFactory) New() stackdriver.StorageClient {
-	return stackdriver.NewClient(&stackdriver.ClientConfig{
-		Logger:    f.logger,
-		ProjectId: f.projectIdResource,
-		URL:       f.url,
-		Timeout:   f.timeout,
-	})
+func (dcf *diskClientFactory) New() stackdriver.StorageClient {
+	filename := dcf.FilePrefix + "_00000"
+	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return stackdriver.NewDiskClient(file)
 }
 
-func (f *clientFactory) Name() string {
-	return f.url.String()
+func (dcf *diskClientFactory) Name() string {
+	return dcf.FilePrefix
 }
 
 func waitForPrometheus(ctx context.Context, logger log.Logger, promURL *url.URL) {
