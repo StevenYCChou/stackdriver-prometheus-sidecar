@@ -32,6 +32,7 @@ import (
 
 	md "cloud.google.com/go/compute/metadata"
 	oc_stackdriver "contrib.go.opencensus.io/exporter/stackdriver"
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/disk"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
@@ -385,7 +386,7 @@ func main() {
 			logger:     log.With(logger, "component", "storage"),
 		}
 	} else {
-		scf = &clientFactory{
+		scf = &stackdriverClientFactory{
 			logger:            log.With(logger, "component", "storage"),
 			projectIdResource: cfg.projectIdResource,
 			url:               cfg.stackdriverAddress,
@@ -555,35 +556,35 @@ func main() {
 	level.Info(logger).Log("msg", "See you next time!")
 }
 
-type clientFactory struct {
+type stackdriverClientFactory struct {
 	logger            log.Logger
 	projectIdResource string
 	url               *url.URL
 	timeout           time.Duration
 }
 
-func (f *clientFactory) New() stackdriver.StorageClient {
+func (s *stackdriverClientFactory) New() stackdriver.StorageClient {
 	return stackdriver.NewClient(&stackdriver.ClientConfig{
-		Logger:    f.logger,
-		ProjectId: f.projectIdResource,
-		URL:       f.url,
-		Timeout:   f.timeout,
+		Logger:    s.logger,
+		ProjectId: s.projectIdResource,
+		URL:       s.url,
+		Timeout:   s.timeout,
 	})
 }
 
-func (f *clientFactory) Name() string {
-	return f.url.String()
+func (s *stackdriverClientFactory) Name() string {
+	return s.url.String()
 }
 
 type diskClientFactory struct {
 	logger log.Logger
 }
 
-func (dcf *diskClientFactory) New() stackdriver.StorageClient {
-	return stackdriver.NewDiskClient()
+func (d *diskClientFactory) New() stackdriver.StorageClient {
+	return disk.NewDiskClient()
 }
 
-func (dcf *diskClientFactory) Name() string {
+func (d *diskClientFactory) Name() string {
 	return "diskClientFactory"
 }
 
