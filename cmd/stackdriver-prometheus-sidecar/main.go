@@ -383,7 +383,6 @@ func main() {
 	if cfg.storeInFile {
 		scf = &diskClientFactory{
 			logger:     log.With(logger, "component", "storage"),
-			FilePrefix: "/tmp/points",
 		}
 	} else {
 		scf = &clientFactory{
@@ -578,20 +577,14 @@ func (f *clientFactory) Name() string {
 
 type diskClientFactory struct {
 	logger log.Logger
-	FilePrefix string
 }
 
 func (dcf *diskClientFactory) New() stackdriver.StorageClient {
-	filename := dcf.FilePrefix + "_00000"
-	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0755)
-	if err != nil {
-		fmt.Println(err)
-	}
-	return stackdriver.NewDiskClient(file)
+	return stackdriver.NewDiskClient()
 }
 
 func (dcf *diskClientFactory) Name() string {
-	return dcf.FilePrefix
+	return "diskClientFactory"
 }
 
 func waitForPrometheus(ctx context.Context, logger log.Logger, promURL *url.URL) {

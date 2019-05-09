@@ -18,6 +18,7 @@ package stackdriver
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/golang/protobuf/proto"
@@ -29,8 +30,12 @@ type DiskClient struct {
 }
 
 // NewDiskClient creates a new DiskClient.
-func NewDiskClient(file *os.File) *DiskClient {
-	return &DiskClient{file: file}
+func NewDiskClient() *DiskClient {
+	file, err := ioutil.TempFile("", "stackdriver-prometheus-sidecar-CreateTimeSeriesRequest-*")
+	if err != nil {
+		fmt.Println(err)
+	}
+	return &DiskClient{file}
 }
 
 // Store put a batch of samples to the disk.
