@@ -31,7 +31,7 @@ type DiskClient struct {
 
 // NewDiskClient creates a new DiskClient.
 func NewDiskClient() *DiskClient {
-	file, err := ioutil.TempFile("", "stackdriver-prometheus-sidecar-CreateTimeSeriesRequest-*")
+	file, err := ioutil.TempFile("", "stackdriver-prometheus-sidecar-CreateTimeSeriesRequest-*.txt")
 	if err != nil {
 		fmt.Println(err)
 	}
