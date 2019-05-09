@@ -22,7 +22,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
-	// monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 type DiskClient struct {

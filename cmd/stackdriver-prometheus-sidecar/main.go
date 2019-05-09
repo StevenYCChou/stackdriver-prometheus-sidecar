@@ -185,6 +185,7 @@ func main() {
 		stackdriverAddress *url.URL
 		metricsPrefix      string
 		useGkeResource     bool
+		storeInFile        bool
 		walDirectory       string
 		prometheusURL      *url.URL
 		listenAddress      string
@@ -231,6 +232,10 @@ func main() {
 	a.Flag("stackdriver.use-gke-resource",
 		"Whether to use the legacy gke_container MonitoredResource type instead of k8s_container").
 		Default("false").BoolVar(&cfg.useGkeResource)
+
+	a.Flag("stackdriver.store-in-file",
+		"Whethere to Store data in filesystem").
+		Default("false").BoolVar(&cfg.storeInFile)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
 		Default("data/wal").StringVar(&cfg.walDirectory)
@@ -373,18 +378,26 @@ func main() {
 	// works well.
 	config.DefaultQueueConfig.Capacity = 3 * stackdriver.MaxTimeseriesesPerRequest
 
+	var scf stackdriver.StorageClientFactory
+
+	if cfg.storeInFile {
+		scf = &diskClientFactory{
+			logger:     log.With(logger, "component", "storage"),
+			FilePrefix: "/tmp/points",
+		}
+	} else {
+		scf = &clientFactory{
+			logger:            log.With(logger, "component", "storage"),
+			projectIdResource: cfg.projectIdResource,
+			url:               cfg.stackdriverAddress,
+			timeout:           10 * time.Second,
+		}
+	}
+
 	queueManager, err := stackdriver.NewQueueManager(
 		log.With(logger, "component", "queue_manager"),
 		config.DefaultQueueConfig,
-		&diskClientFactory{
-			FilePrefix: "/tmp/points",
-		},
-		// &clientFactory{
-		// 	logger:            log.With(logger, "component", "storage"),
-		// 	projectIdResource: cfg.projectIdResource,
-		// 	url:               cfg.stackdriverAddress,
-		// 	timeout:           10 * time.Second,
-		// },
+		scf,
 		tailer,
 	)
 	if err != nil {
@@ -543,27 +556,28 @@ func main() {
 	level.Info(logger).Log("msg", "See you next time!")
 }
 
-// type clientFactory struct {
-// 	logger            log.Logger
-// 	projectIdResource string
-// 	url               *url.URL
-// 	timeout           time.Duration
-// }
+type clientFactory struct {
+	logger            log.Logger
+	projectIdResource string
+	url               *url.URL
+	timeout           time.Duration
+}
 
-// func (f *clientFactory) New() stackdriver.StorageClient {
-// 	return stackdriver.NewClient(&stackdriver.ClientConfig{
-// 		Logger:    f.logger,
-// 		ProjectId: f.projectIdResource,
-// 		URL:       f.url,
-// 		Timeout:   f.timeout,
-// 	})
-// }
+func (f *clientFactory) New() stackdriver.StorageClient {
+	return stackdriver.NewClient(&stackdriver.ClientConfig{
+		Logger:    f.logger,
+		ProjectId: f.projectIdResource,
+		URL:       f.url,
+		Timeout:   f.timeout,
+	})
+}
 
-// func (f *clientFactory) Name() string {
-// 	return f.url.String()
-// }
+func (f *clientFactory) Name() string {
+	return f.url.String()
+}
 
 type diskClientFactory struct {
+	logger log.Logger
 	FilePrefix string
 }
 
