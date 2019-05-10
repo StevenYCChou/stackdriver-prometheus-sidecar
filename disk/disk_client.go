@@ -21,21 +21,39 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/golang/protobuf/proto"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 type DiskClient struct {
+	logger log.Logger
 	file *os.File
 }
 
 // NewDiskClient creates a new DiskClient.
-func NewDiskClient() *DiskClient {
-	file, err := ioutil.TempFile("", "stackdriver-prometheus-sidecar-CreateTimeSeriesRequest-*.txt")
+func NewDiskClient(logger log.Logger) *DiskClient {
+        if logger == nil {
+                logger = log.NewNopLogger()
+        }
+	tmpOutputDir := os.TempDir() + "/stackdriver-prometheus-sidecar/CreateTimeSeriesRequest"
+	err := os.MkdirAll(tmpOutputDir, 0700)
 	if err != nil {
-		fmt.Println(err)
+		level.Warn(logger).Log(
+			"msg", "failure creating directory.",
+			"err", err)
 	}
-	return &DiskClient{file}
+	file, err := ioutil.TempFile(tmpOutputDir, "*.txt")
+	if err != nil {
+		level.Warn(logger).Log(
+			"msg", "failure creating files.",
+			"err", err)
+	}
+	return &DiskClient{
+		file: file,
+		logger: logger,
+	}
 }
 
 // Store put a batch of samples to the disk.

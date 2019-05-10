@@ -581,7 +581,7 @@ type diskClientFactory struct {
 }
 
 func (d *diskClientFactory) New() stackdriver.StorageClient {
-	return disk.NewDiskClient()
+	return disk.NewDiskClient(d.logger)
 }
 
 func (d *diskClientFactory) Name() string {
