@@ -14,10 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package disk
+package file
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 
@@ -27,13 +26,17 @@ import (
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
-type DiskClient struct {
+// FileClient allows writing to a file gRPC endpoint. The
+// implementation may hit a single backend, so the application should create a
+// number of these clients.
+type FileClient struct {
 	logger log.Logger
 	file *os.File
 }
 
-// NewDiskClient creates a new DiskClient.
-func NewDiskClient(logger log.Logger) *DiskClient {
+// NewFileClient creates a file under os.TempDir(), and creates a new FileClient writing to
+// the file. The user of NewFileClient is responsible to manage the created file.
+func NewFileClient(logger log.Logger) *FileClient {
         if logger == nil {
                 logger = log.NewNopLogger()
         }
@@ -41,7 +44,7 @@ func NewDiskClient(logger log.Logger) *DiskClient {
 	err := os.MkdirAll(tmpOutputDir, 0700)
 	if err != nil {
 		level.Warn(logger).Log(
-			"msg", "failure creating directory.",
+			"msg", "Failure creating directory.",
 			"err", err)
 	}
 	file, err := ioutil.TempFile(tmpOutputDir, "*.txt")
@@ -50,27 +53,31 @@ func NewDiskClient(logger log.Logger) *DiskClient {
 			"msg", "failure creating files.",
 			"err", err)
 	}
-	return &DiskClient{
+	return &FileClient{
 		file: file,
 		logger: logger,
 	}
 }
 
-// Store put a batch of samples to the disk.
-func (dc *DiskClient) Store(req *monitoring.CreateTimeSeriesRequest) error {
+// Store writes a batch of samples to the file.
+func (f *FileClient) Store(req *monitoring.CreateTimeSeriesRequest) error {
 	data, err := proto.Marshal(req)
 	if err != nil {
-		fmt.Println(err)
+		level.Warn(f.logger).Log(
+			"msg", "failure marshaling CreateTimeSeriesRequest.",
+			"err", err)
 		return err
 	}
-	_, err = dc.file.Write(data)
+	_, err = f.file.Write(data)
 	if err != nil {
-		fmt.Println(err)
+		level.Warn(f.logger).Log(
+			"msg", "failure writing data to file.",
+			"err", err)
 		return err
 	}
 	return nil
 }
 
-func (dc *DiskClient) Close() error {
-	return dc.file.Close()
+func (f *FileClient) Close() error {
+	return f.file.Close()
 }

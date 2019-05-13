@@ -32,7 +32,7 @@ import (
 
 	md "cloud.google.com/go/compute/metadata"
 	oc_stackdriver "contrib.go.opencensus.io/exporter/stackdriver"
-	"github.com/Stackdriver/stackdriver-prometheus-sidecar/disk"
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/file"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
@@ -382,7 +382,7 @@ func main() {
 	var scf stackdriver.StorageClientFactory
 
 	if cfg.storeInFile {
-		scf = &diskClientFactory{
+		scf = &fileClientFactory{
 			logger:     log.With(logger, "component", "storage"),
 		}
 	} else {
@@ -576,16 +576,16 @@ func (s *stackdriverClientFactory) Name() string {
 	return s.url.String()
 }
 
-type diskClientFactory struct {
+type fileClientFactory struct {
 	logger log.Logger
 }
 
-func (d *diskClientFactory) New() stackdriver.StorageClient {
-	return disk.NewDiskClient(d.logger)
+func (f *fileClientFactory) New() stackdriver.StorageClient {
+	return file.NewFileClient(f.logger)
 }
 
-func (d *diskClientFactory) Name() string {
-	return "diskClientFactory"
+func (f *fileClientFactory) Name() string {
+	return "fileClientFactory"
 }
 
 func waitForPrometheus(ctx context.Context, logger log.Logger, promURL *url.URL) {
