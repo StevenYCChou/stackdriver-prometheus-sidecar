@@ -404,7 +404,8 @@ func main() {
 	// being available for every new request.
 	// Testing with different latencies and shard numbers have shown that 3x of the batch size
 	// works well.
-	config.DefaultQueueConfig.Capacity = 3 * stackdriver.MaxTimeseriesesPerRequest
+	config.DefaultQueueConfig.Capacity = 10 * stackdriver.MaxTimeseriesesPerRequest
+	config.DefaultQueueConfig.MinShards = 20
 
 	var scf stackdriver.StorageClientFactory
 
