@@ -161,7 +161,7 @@ func NewQueueManager(logger log.Logger, cfg config.QueueConfig, clientFactory St
 		queueName:     clientFactory.Name(),
 
 		logLimiter:  rate.NewLimiter(logRateLimit, logBurst),
-		numShards:   1,
+		numShards:   20,
 		reshardChan: make(chan int),
 		quit:        make(chan struct{}),
 
@@ -204,9 +204,14 @@ func (t *QueueManager) Append(hash uint64, sample *monitoring_pb.TimeSeries) err
 // Start the queue manager sending samples to the remote storage.
 // Does not block.
 func (t *QueueManager) Start() error {
-	t.wg.Add(2)
+	// t.wg.Add(2)
+	// go t.updateShardsLoop()
+	// go t.reshardLoop()
+
+	// testing when there is no real resharding executed,
+	// even updateShardsLoop will still be running.
+	t.wg.Add(1)
 	go t.updateShardsLoop()
-	go t.reshardLoop()
 
 	t.shardsMtx.Lock()
 	defer t.shardsMtx.Unlock()
