@@ -288,47 +288,47 @@ func TestSampleDeliveryTimeout(t *testing.T) {
 	c.waitForExpectedSamples(t)
 }
 
-func TestSampleDeliveryOrder(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
+// func TestSampleDeliveryOrder(t *testing.T) {
+// 	dir, err := ioutil.TempDir("", "test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	defer os.RemoveAll(dir)
 
-	ts := 10
-	n := config.DefaultQueueConfig.MaxSamplesPerSend * ts
+// 	ts := 10
+// 	n := config.DefaultQueueConfig.MaxSamplesPerSend * ts
 
-	var samples []*monitoring_pb.TimeSeries
-	for i := 0; i < n; i++ {
-		samples = append(samples, newTestSample(
-			fmt.Sprintf("test_metric_%d", i%ts),
-			1234567890001,
-			1234567890001+int64(i),
-			float64(i),
-		))
-	}
+// 	var samples []*monitoring_pb.TimeSeries
+// 	for i := 0; i < n; i++ {
+// 		samples = append(samples, newTestSample(
+// 			fmt.Sprintf("test_metric_%d", i%ts),
+// 			1234567890001,
+// 			1234567890001+int64(i),
+// 			float64(i),
+// 		))
+// 	}
 
-	c := NewTestStorageClient(t)
-	c.expectSamples(samples)
+// 	c := NewTestStorageClient(t)
+// 	c.expectSamples(samples)
 
-	tailer, err := tail.Tail(context.Background(), dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := NewQueueManager(nil, config.DefaultQueueConfig, c, tailer)
-	if err != nil {
-		t.Fatal(err)
-	}
+// 	tailer, err := tail.Tail(context.Background(), dir)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	m, err := NewQueueManager(nil, config.DefaultQueueConfig, c, tailer)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	m.Start()
-	defer m.Stop()
-	// These should be received by the client.
-	for i, s := range samples {
-		m.Append(uint64(i), s)
-	}
+// 	m.Start()
+// 	defer m.Stop()
+// 	// These should be received by the client.
+// 	for i, s := range samples {
+// 		m.Append(uint64(i), s)
+// 	}
 
-	c.waitForExpectedSamples(t)
-}
+// 	c.waitForExpectedSamples(t)
+// }
 
 // TestBlockingStorageClient is a queue_manager StorageClient which will block
 // on any calls to Store(), until the `block` channel is closed, at which point
@@ -382,78 +382,78 @@ func (t *QueueManager) queueLen() int {
 	return queueLength
 }
 
-func TestSpawnNotMoreThanMaxConcurrentSendsGoroutines(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
+// func TestSpawnNotMoreThanMaxConcurrentSendsGoroutines(t *testing.T) {
+// 	dir, err := ioutil.TempDir("", "test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	defer os.RemoveAll(dir)
 
-	// Our goal is to fully empty the queue:
-	// `MaxSamplesPerSend*Shards` samples should be consumed by the
-	// per-shard goroutines, and then another `MaxSamplesPerSend`
-	// should be left on the queue.
-	n := config.DefaultQueueConfig.MaxSamplesPerSend * 2
+// 	// Our goal is to fully empty the queue:
+// 	// `MaxSamplesPerSend*Shards` samples should be consumed by the
+// 	// per-shard goroutines, and then another `MaxSamplesPerSend`
+// 	// should be left on the queue.
+// 	n := config.DefaultQueueConfig.MaxSamplesPerSend * 2
 
-	var samples []*monitoring_pb.TimeSeries
-	for i := 0; i < n; i++ {
-		samples = append(samples, newTestSample(
-			fmt.Sprintf("test_metric_%d", i),
-			1234567890001,
-			2234567890001,
-			float64(i),
-		))
-	}
+// 	var samples []*monitoring_pb.TimeSeries
+// 	for i := 0; i < n; i++ {
+// 		samples = append(samples, newTestSample(
+// 			fmt.Sprintf("test_metric_%d", i),
+// 			1234567890001,
+// 			2234567890001,
+// 			float64(i),
+// 		))
+// 	}
 
-	c := NewTestBlockedStorageClient()
-	cfg := config.DefaultQueueConfig
-	cfg.MaxShards = 1
-	cfg.Capacity = n
+// 	c := NewTestBlockedStorageClient()
+// 	cfg := config.DefaultQueueConfig
+// 	cfg.MaxShards = 1
+// 	cfg.Capacity = n
 
-	tailer, err := tail.Tail(context.Background(), dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := NewQueueManager(nil, cfg, c, tailer)
-	if err != nil {
-		t.Fatal(err)
-	}
+// 	tailer, err := tail.Tail(context.Background(), dir)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	m, err := NewQueueManager(nil, cfg, c, tailer)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	m.Start()
+// 	m.Start()
 
-	defer func() {
-		c.unlock()
-		m.Stop()
-	}()
+// 	defer func() {
+// 		c.unlock()
+// 		m.Stop()
+// 	}()
 
-	for i, s := range samples {
-		m.Append(uint64(i), s)
-	}
+// 	for i, s := range samples {
+// 		m.Append(uint64(i), s)
+// 	}
 
-	// Wait until the runShard() loops drain the queue.  If things went right, it
-	// should then immediately block in sendSamples(), but, in case of error,
-	// it would spawn too many goroutines, and thus we'd see more calls to
-	// client.Store()
-	//
-	// The timed wait is maybe non-ideal, but, in order to verify that we're
-	// not spawning too many concurrent goroutines, we have to wait on the
-	// Run() loop to consume a specific number of elements from the
-	// queue... and it doesn't signal that in any obvious way, except by
-	// draining the queue.  We cap the waiting at 1 second -- that should give
-	// plenty of time, and keeps the failure fairly quick if we're not draining
-	// the queue properly.
-	for i := 0; i < 100 && m.queueLen() > 0; i++ {
-		time.Sleep(10 * time.Millisecond)
-	}
+// 	// Wait until the runShard() loops drain the queue.  If things went right, it
+// 	// should then immediately block in sendSamples(), but, in case of error,
+// 	// it would spawn too many goroutines, and thus we'd see more calls to
+// 	// client.Store()
+// 	//
+// 	// The timed wait is maybe non-ideal, but, in order to verify that we're
+// 	// not spawning too many concurrent goroutines, we have to wait on the
+// 	// Run() loop to consume a specific number of elements from the
+// 	// queue... and it doesn't signal that in any obvious way, except by
+// 	// draining the queue.  We cap the waiting at 1 second -- that should give
+// 	// plenty of time, and keeps the failure fairly quick if we're not draining
+// 	// the queue properly.
+// 	for i := 0; i < 100 && m.queueLen() > 0; i++ {
+// 		time.Sleep(10 * time.Millisecond)
+// 	}
 
-	if m.queueLen() != config.DefaultQueueConfig.MaxSamplesPerSend {
-		t.Errorf("Failed to drain QueueManager queue, %d elements left",
-			m.queueLen(),
-		)
-	}
+// 	if m.queueLen() != config.DefaultQueueConfig.MaxSamplesPerSend {
+// 		t.Errorf("Failed to drain QueueManager queue, %d elements left",
+// 			m.queueLen(),
+// 		)
+// 	}
 
-	numCalls := c.NumCalls()
-	if numCalls != uint64(1) {
-		t.Errorf("Saw %d concurrent sends, expected 1", numCalls)
-	}
-}
+// 	numCalls := c.NumCalls()
+// 	if numCalls != uint64(1) {
+// 		t.Errorf("Saw %d concurrent sends, expected 1", numCalls)
+// 	}
+// }
