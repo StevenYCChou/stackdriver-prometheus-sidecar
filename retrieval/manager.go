@@ -14,8 +14,10 @@ limitations under the License.
 package retrieval
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -340,6 +342,11 @@ func hashSeries(s *monitoring_pb.TimeSeries) uint64 {
 		h = hashAdd(h, l.Name)
 		h = hashAddByte(h, sep)
 		h = hashAdd(h, l.Value)
+	}
+	if h == 0 {
+		b := bytes.NewBuffer([]byte{})
+		json.NewEncoder(b).Encode(s)
+		fmt.Printf("sample: %s, hash: %v\n", b.String(), h)
 	}
 	return h
 }

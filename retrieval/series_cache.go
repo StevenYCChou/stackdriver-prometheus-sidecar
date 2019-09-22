@@ -457,10 +457,10 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		return errors.Errorf("unexpected metric type %s", metadata.Type)
 	}
 
+	entry.hash = hashSeries(ts)
 	entry.proto = ts
 	entry.metadata = metadata
 	entry.suffix = suffix
-	entry.hash = hashSeries(ts)
 
 	return nil
 }

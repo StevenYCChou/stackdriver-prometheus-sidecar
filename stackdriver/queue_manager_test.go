@@ -288,47 +288,47 @@ func TestSampleDeliveryTimeout(t *testing.T) {
 	c.waitForExpectedSamples(t)
 }
 
-// func TestSampleDeliveryOrder(t *testing.T) {
-// 	dir, err := ioutil.TempDir("", "test")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer os.RemoveAll(dir)
+func TestSampleDeliveryOrder(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
 
-// 	ts := 10
-// 	n := config.DefaultQueueConfig.MaxSamplesPerSend * ts
+	ts := 10
+	n := config.DefaultQueueConfig.MaxSamplesPerSend * ts
 
-// 	var samples []*monitoring_pb.TimeSeries
-// 	for i := 0; i < n; i++ {
-// 		samples = append(samples, newTestSample(
-// 			fmt.Sprintf("test_metric_%d", i%ts),
-// 			1234567890001,
-// 			1234567890001+int64(i),
-// 			float64(i),
-// 		))
-// 	}
+	var samples []*monitoring_pb.TimeSeries
+	for i := 0; i < n; i++ {
+		samples = append(samples, newTestSample(
+			fmt.Sprintf("test_metric_%d", i%ts),
+			1234567890001,
+			1234567890001+int64(i),
+			float64(i),
+		))
+	}
 
-// 	c := NewTestStorageClient(t)
-// 	c.expectSamples(samples)
+	c := NewTestStorageClient(t)
+	c.expectSamples(samples)
 
-// 	tailer, err := tail.Tail(context.Background(), dir)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	m, err := NewQueueManager(nil, config.DefaultQueueConfig, c, tailer)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
+	tailer, err := tail.Tail(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := NewQueueManager(nil, config.DefaultQueueConfig, c, tailer)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-// 	m.Start()
-// 	defer m.Stop()
-// 	// These should be received by the client.
-// 	for i, s := range samples {
-// 		m.Append(uint64(i), s)
-// 	}
+	m.Start()
+	defer m.Stop()
+	// These should be received by the client.
+	for i, s := range samples {
+		m.Append(uint64(i), s)
+	}
 
-// 	c.waitForExpectedSamples(t)
-// }
+	c.waitForExpectedSamples(t)
+}
 
 // TestBlockingStorageClient is a queue_manager StorageClient which will block
 // on any calls to Store(), until the `block` channel is closed, at which point
