@@ -39,6 +39,11 @@ type seriesMap map[uint64]labels.Labels
 // It never returns an error.
 type targetMap map[string]*targets.Target
 
+type sampleBuilderResult struct {
+	timeseries *monitoring_pb.TimeSeries
+	hash       uint64
+}
+
 func (g targetMap) Get(ctx context.Context, lset promlabels.Labels) (*targets.Target, error) {
 	key := lset.Get("job") + "/" + lset.Get("instance")
 	return g[key], nil
@@ -72,7 +77,7 @@ func TestSampleBuilder(t *testing.T) {
 		metadata     MetadataGetter
 		metricPrefix string
 		input        []tsdb.RefSample
-		result       []*monitoring_pb.TimeSeries
+		result       []sampleBuilderResult
 		fail         bool
 	}{
 		{
@@ -107,114 +112,135 @@ func TestSampleBuilder(t *testing.T) {
 				{Ref: 3, T: 3000, V: 1},
 				{Ref: 4, T: 4000, V: 2},
 			},
-			result: []*monitoring_pb.TimeSeries{
-				nil, // Skipped by reset timestamp handling.
+			result: []sampleBuilderResult{
+				{ // Skipped by reset timestamp handling.
+					timeseries: nil,
+					hash: 0,
+				},
 				{ // 1
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric2",
-						Labels: map[string]string{},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{2.5},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric2",
+							Labels: map[string]string{},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								StartTime: &timestamp_pb.Timestamp{Seconds: 2},
+								EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{2.5},
+							},
+						}},
+					},
+					hash: 17379420282460653849,
 				},
 				{ // 2
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric2",
-						Labels: map[string]string{},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 4},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{3.5},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric2",
+							Labels: map[string]string{},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								StartTime: &timestamp_pb.Timestamp{Seconds: 2},
+								EndTime:   &timestamp_pb.Timestamp{Seconds: 4},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{3.5},
+							},
+						}},
+					},
+					hash: 17379420282460653849,
 				},
 				{ // 3
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric2",
-						Labels: map[string]string{},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 4, Nanos: 1e9 - 1e6},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 5},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{3},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric2",
+							Labels: map[string]string{},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								StartTime: &timestamp_pb.Timestamp{Seconds: 4, Nanos: 1e9 - 1e6},
+								EndTime:   &timestamp_pb.Timestamp{Seconds: 5},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{3},
+							},
+						}},
+					},
+					hash: 17379420282460653849,
 				},
 				{ // 4
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric1",
-						Labels: map[string]string{"a": "1"},
-					},
-					MetricKind: metric_pb.MetricDescriptor_GAUGE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{200},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric1",
+							Labels: map[string]string{"a": "1"},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_GAUGE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{200},
+							},
+						}},
+					},
+					hash: 16714214885983234460,
 				},
 				{ // 5
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
+						},
+						Metric: &metric_pb.Metric{
+							Type: "external.googleapis.com/prometheus/labelnum_ok",
+							Labels: map[string]string{
+								"a": "1", "b": "2", "c": "3", "d": "4", "e": "5", "f": "6", "g": "7", "h": "8", "i": "9", "j": "10",
+							},
+						},
+						MetricKind: metric_pb.MetricDescriptor_GAUGE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								EndTime: &timestamp_pb.Timestamp{Seconds: 3},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{1},
+							},
+						}},
 					},
-					Metric: &metric_pb.Metric{
-						Type: "external.googleapis.com/prometheus/labelnum_ok",
-						Labels: map[string]string{
-							"a": "1", "b": "2", "c": "3", "d": "4", "e": "5", "f": "6", "g": "7", "h": "8", "i": "9", "j": "10",
-						},
-					},
-					MetricKind: metric_pb.MetricDescriptor_GAUGE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							EndTime: &timestamp_pb.Timestamp{Seconds: 3},
-						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{1},
-						},
-					}},
+					hash: 1077045099492120725,
 				},
-				nil, // 6: Dropped sample with too many labels.
+				{ // 6: Dropped sample with too many labels.
+					timeseries: nil,
+					hash: 0,
+				},
 			},
 		},
 		// Various cases where we drop series due to absence of additional information.
@@ -241,7 +267,20 @@ func TestSampleBuilder(t *testing.T) {
 				{Ref: 2, T: 2000, V: 2},
 				{Ref: 3, T: 3000, V: 3},
 			},
-			result: []*monitoring_pb.TimeSeries{nil, nil, nil},
+			result: []sampleBuilderResult{
+				{
+					timeseries: nil,
+					hash: 0,
+				},
+				{
+					timeseries: nil,
+					hash: 0,
+				},
+				{
+					timeseries: nil,
+					hash: 0,
+				},
+			},
 		},
 		// Summary metrics.
 		{
@@ -268,90 +307,108 @@ func TestSampleBuilder(t *testing.T) {
 				{Ref: 3, T: 3500, V: 4},
 				{Ref: 4, T: 4000, V: 4},
 			},
-			result: []*monitoring_pb.TimeSeries{
-				nil, // 0: dropped by reset handling.
+			result: []sampleBuilderResult{
+				{ // 0: dropped by reset handling.
+					timeseries: nil,
+					hash: 0,
+				},
 				{ // 1
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric1_sum",
-						Labels: map[string]string{},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 1},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 1, Nanos: 5e8},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{0},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric1_sum",
+							Labels: map[string]string{},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								StartTime: &timestamp_pb.Timestamp{Seconds: 1},
+								EndTime:   &timestamp_pb.Timestamp{Seconds: 1, Nanos: 5e8},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{0},
+							},
+						}},
+					},
+					hash: 3329640537334693504,					
 				},
 				{ // 2
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric1",
-						Labels: map[string]string{"quantile": "0.5"},
-					},
-					MetricKind: metric_pb.MetricDescriptor_GAUGE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							EndTime: &timestamp_pb.Timestamp{Seconds: 2},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{2},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric1",
+							Labels: map[string]string{"quantile": "0.5"},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_GAUGE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								EndTime: &timestamp_pb.Timestamp{Seconds: 2},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{2},
+							},
+						}},
+					},
+					hash: 10010306784060307258,
 				},
-				nil, // 3: dropped by reset handling.
+				{ // 3: dropped by reset handling.
+					timeseries: nil,
+					hash: 0,
+				},
 				{ // 4
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric1_count",
-						Labels: map[string]string{},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_INT64,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 3},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 3, Nanos: 5e8},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_Int64Value{1},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric1_count",
+							Labels: map[string]string{},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+						ValueType:  metric_pb.MetricDescriptor_INT64,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								StartTime: &timestamp_pb.Timestamp{Seconds: 3},
+								EndTime:   &timestamp_pb.Timestamp{Seconds: 3, Nanos: 5e8},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_Int64Value{1},
+							},
+						}},
+					},
+					hash: 3102002753230526660,
 				},
 				{ // 5
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric1",
-						Labels: map[string]string{"quantile": "0.9"},
-					},
-					MetricKind: metric_pb.MetricDescriptor_GAUGE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							EndTime: &timestamp_pb.Timestamp{Seconds: 4},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{4},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric1",
+							Labels: map[string]string{"quantile": "0.9"},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_GAUGE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								EndTime: &timestamp_pb.Timestamp{Seconds: 4},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{4},
+							},
+						}},
+					},
+					hash: 10010293589920768726,
 				},
 			},
 		},
@@ -408,98 +465,113 @@ func TestSampleBuilder(t *testing.T) {
 				// New metric that actually matches the base name but the suffix is more more than a valid histogram suffix.
 				{Ref: 10, T: 1000, V: 3},
 			},
-			result: []*monitoring_pb.TimeSeries{
-				nil, // 0: skipped by reset handling.
-				{ // 1
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric1",
-						Labels: map[string]string{},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_DISTRIBUTION,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 1},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 2},
-						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DistributionValue{
-								&distribution_pb.Distribution{
-									Count:                 11,
-									Mean:                  6.20909090909091,
-									SumOfSquaredDeviation: 270.301590909091,
-									BucketOptions: &distribution_pb.Distribution_BucketOptions{
-										Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
-											ExplicitBuckets: &distribution_pb.Distribution_BucketOptions_Explicit{
-												Bounds: []float64{0.1, 0.5, 1, 2.5},
-											},
-										},
-									},
-									BucketCounts: []int64{2, 2, 1, 2, 4},
-								},
-							},
-						},
-					}},
+			result: []sampleBuilderResult{
+				{ // 0: skipped by reset handling.
+					timeseries: nil,
+					hash: 0,
 				},
-				nil, // 2: skipped by reset handling
-				{ // 3
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric1",
-						Labels: map[string]string{"a": "b"},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_DISTRIBUTION,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 1},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 2},
+				{ // 1
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DistributionValue{
-								&distribution_pb.Distribution{
-									Count:                 3,
-									Mean:                  5,
-									SumOfSquaredDeviation: 0,
-									BucketOptions: &distribution_pb.Distribution_BucketOptions{
-										Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
-											ExplicitBuckets: &distribution_pb.Distribution_BucketOptions_Explicit{
-												Bounds: []float64{},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric1",
+							Labels: map[string]string{},
+						},
+						MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+						ValueType:  metric_pb.MetricDescriptor_DISTRIBUTION,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								StartTime: &timestamp_pb.Timestamp{Seconds: 1},
+								EndTime:   &timestamp_pb.Timestamp{Seconds: 2},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DistributionValue{
+									&distribution_pb.Distribution{
+										Count:                 11,
+										Mean:                  6.20909090909091,
+										SumOfSquaredDeviation: 270.301590909091,
+										BucketOptions: &distribution_pb.Distribution_BucketOptions{
+											Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
+												ExplicitBuckets: &distribution_pb.Distribution_BucketOptions_Explicit{
+													Bounds: []float64{0.1, 0.5, 1, 2.5},
+												},
 											},
 										},
+										BucketCounts: []int64{2, 2, 1, 2, 4},
 									},
-									BucketCounts: []int64{},
 								},
 							},
+						}},
+					},
+					hash: 5588351805089353804,
+				},
+				{ // 2: skipped by reset handling
+					timeseries: nil,
+					hash: 0,
+				},
+				{ // 3
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-					}},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric1",
+							Labels: map[string]string{"a": "b"},
+						},
+						MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+						ValueType:  metric_pb.MetricDescriptor_DISTRIBUTION,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								StartTime: &timestamp_pb.Timestamp{Seconds: 1},
+								EndTime:   &timestamp_pb.Timestamp{Seconds: 2},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DistributionValue{
+									&distribution_pb.Distribution{
+										Count:                 3,
+										Mean:                  5,
+										SumOfSquaredDeviation: 0,
+										BucketOptions: &distribution_pb.Distribution_BucketOptions{
+											Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
+												ExplicitBuckets: &distribution_pb.Distribution_BucketOptions_Explicit{
+													Bounds: []float64{},
+												},
+											},
+										},
+										BucketCounts: []int64{},
+									},
+								},
+							},
+						}},
+					},
+					hash: 16714130223587862213,
 				},
 				{ // 4
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric1_a_count",
-						Labels: map[string]string{"a": "b"},
-					},
-					MetricKind: metric_pb.MetricDescriptor_GAUGE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{3},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric1_a_count",
+							Labels: map[string]string{"a": "b"},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_GAUGE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{3},
+							},
+						}},
+					},
+					hash: 14923310437095180661,
 				},
 			},
 		},
@@ -536,53 +608,71 @@ func TestSampleBuilder(t *testing.T) {
 				{Ref: 2, T: 3500, V: 3},
 				{Ref: 1, T: 3000, V: 2},
 			},
-			result: []*monitoring_pb.TimeSeries{
-				nil, // Skipped by reset timestamp handling.
-				nil, // Skipped by reset timestamp handling.
-				{
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric1",
-						Labels: map[string]string{},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 1},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 2},
-						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{5},
-						},
-					}},
+			result: []sampleBuilderResult{
+				{ // Skipped by reset timestamp handling.
+					timeseries: nil,
+					hash: 0,
 				},
-				nil,
-				{
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "external.googleapis.com/prometheus/metric1",
-						Labels: map[string]string{},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 3, Nanos: 5e8 - 1e6},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 3, Nanos: 5e8},
-						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{3},
-						},
-					}},
+				{ // Skipped by reset timestamp handling.
+					timeseries: nil,
+					hash: 0,
 				},
-				nil,
+				{
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
+						},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric1",
+							Labels: map[string]string{},
+						},
+						MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								StartTime: &timestamp_pb.Timestamp{Seconds: 1},
+								EndTime:   &timestamp_pb.Timestamp{Seconds: 2},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{5},
+							},
+						}},
+					},
+					hash: 5588351805089353804,
+				},
+				{
+					timeseries: nil,
+					hash: 0,
+				},
+				{
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
+						},
+						Metric: &metric_pb.Metric{
+							Type:   "external.googleapis.com/prometheus/metric1",
+							Labels: map[string]string{},
+						},
+						MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								StartTime: &timestamp_pb.Timestamp{Seconds: 3, Nanos: 5e8 - 1e6},
+								EndTime:   &timestamp_pb.Timestamp{Seconds: 3, Nanos: 5e8},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{3},
+							},
+						}},
+					},
+					hash: 5588351805089353804,
+				},
+				{
+					timeseries: nil,
+					hash: 0,
+				},
 			},
 		},
 		// Customized metric prefix.
@@ -603,26 +693,29 @@ func TestSampleBuilder(t *testing.T) {
 			input: []tsdb.RefSample{
 				{Ref: 1, T: 1000, V: 200},
 			},
-			result: []*monitoring_pb.TimeSeries{
+			result: []sampleBuilderResult{
 				{
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "test.googleapis.com/metric1",
-						Labels: map[string]string{"a": "1"},
-					},
-					MetricKind: metric_pb.MetricDescriptor_GAUGE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{200},
+						Metric: &metric_pb.Metric{
+							Type:   "test.googleapis.com/metric1",
+							Labels: map[string]string{"a": "1"},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_GAUGE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{200},
+							},
+						}},
+					},
+					hash: 17778873539003916004,
 				},
 			},
 		},
@@ -646,28 +739,34 @@ func TestSampleBuilder(t *testing.T) {
 				{Ref: 1, T: 2000, V: 5.5},
 				{Ref: 1, T: 3000, V: 8},
 			},
-			result: []*monitoring_pb.TimeSeries{
-				nil, // Skipped by reset timestamp handling.
+			result: []sampleBuilderResult{
 				{
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "test.googleapis.com/metric1_total",
-						Labels: map[string]string{"a": "1"},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
+					timeseries: nil,
+					hash: 0,
+				},
+				{
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{2.5},
+						Metric: &metric_pb.Metric{
+							Type:   "test.googleapis.com/metric1_total",
+							Labels: map[string]string{"a": "1"},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								StartTime: &timestamp_pb.Timestamp{Seconds: 2},
+								EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{2.5},
+							},
+						}},
+					},
+					hash: 16354458696444431005,
 				},
 			},
 		},
@@ -692,28 +791,34 @@ func TestSampleBuilder(t *testing.T) {
 				{Ref: 1, T: 2000, V: 5.5},
 				{Ref: 1, T: 3000, V: 8},
 			},
-			result: []*monitoring_pb.TimeSeries{
-				nil, // Skipped by reset timestamp handling.
+			result: []sampleBuilderResult{
+				{ // Skipped by reset timestamp handling.
+					timeseries: nil,
+					hash: 0,
+				},
 				{
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "test.googleapis.com/metric1",
-						Labels: map[string]string{"a": "1"},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{2.5},
+						Metric: &metric_pb.Metric{
+							Type:   "test.googleapis.com/metric1",
+							Labels: map[string]string{"a": "1"},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								StartTime: &timestamp_pb.Timestamp{Seconds: 2},
+								EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{2.5},
+							},
+						}},
+					},
+					hash: 17778873539003916004,
 				},
 			},
 		},
@@ -737,26 +842,29 @@ func TestSampleBuilder(t *testing.T) {
 			input: []tsdb.RefSample{
 				{Ref: 1, T: 3000, V: 8},
 			},
-			result: []*monitoring_pb.TimeSeries{
+			result: []sampleBuilderResult{
 				{
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "test.googleapis.com/metric1_total",
-						Labels: map[string]string{"a": "1"},
-					},
-					MetricKind: metric_pb.MetricDescriptor_GAUGE,
-					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							EndTime: &timestamp_pb.Timestamp{Seconds: 3},
+					timeseries: &monitoring_pb.TimeSeries{
+						Resource: &monitoredres_pb.MonitoredResource{
+							Type:   "resource2",
+							Labels: map[string]string{"resource_a": "resource2_a"},
 						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{8},
+						Metric: &metric_pb.Metric{
+							Type:   "test.googleapis.com/metric1_total",
+							Labels: map[string]string{"a": "1"},
 						},
-					}},
+						MetricKind: metric_pb.MetricDescriptor_GAUGE,
+						ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+						Points: []*monitoring_pb.Point{{
+							Interval: &monitoring_pb.TimeInterval{
+								EndTime: &timestamp_pb.Timestamp{Seconds: 3},
+							},
+							Value: &monitoring_pb.TypedValue{
+								Value: &monitoring_pb.TypedValue_DoubleValue{8},
+							},
+						}},
+					},
+					hash: 16354458696444431005,
 				},
 			},
 		},
@@ -768,8 +876,9 @@ func TestSampleBuilder(t *testing.T) {
 		t.Logf("Test case %d", i)
 
 		var s *monitoring_pb.TimeSeries
+		var h uint64
 		var err error
-		var result []*monitoring_pb.TimeSeries
+		var result []sampleBuilderResult
 
 		aggr, _ := NewCounterAggregator(log.NewNopLogger(), new(CounterAggregatorConfig))
 		series := newSeriesCache(nil, "", nil, nil, c.targets, c.metadata, resourceMaps, c.metricPrefix, false, aggr)
@@ -780,11 +889,14 @@ func TestSampleBuilder(t *testing.T) {
 		b := &sampleBuilder{series: series}
 
 		for k := 0; len(c.input) > 0; k++ {
-			s, _, c.input, err = b.next(context.Background(), c.input)
+			s, h, c.input, err = b.next(context.Background(), c.input)
 			if err != nil {
 				break
 			}
-			result = append(result, s)
+			result = append(result, sampleBuilderResult{
+				timeseries: s,
+				hash: h,
+			})
 		}
 		if err == nil && c.fail {
 			t.Fatal("expected error but got none")
