@@ -16,8 +16,10 @@ package stackdriver
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -44,29 +46,56 @@ func newLocalListener() net.Listener {
 }
 
 func TestStoreErrorHandlingOnCredentialRetrieval(t *testing.T) {
-        listener := newLocalListener()
-        grpcServer := grpc.NewServer()
-        monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
-        go grpcServer.Serve(listener)
-        defer grpcServer.Stop()
+	str := `{
+  "type": "service_account",
+  "project_id": "mock_project_id",
+  "private_key_id": "mock_private_key_id",
+  "private_key": "mock_private_key",
+  "client_id": "mock_client_id",
+  "auth_uri": "mock_auth_uri",
+  "token_uri": "mock_token_uri",
+  "auth_provider_x509_cert_url": "mock_auth_provider_x509_cert_url",
+  "client_x509_cert_url": "mock_client_x509_cert_url"
+}`
+	content := []byte(str)
+	tmpfile, err := ioutil.TempFile("", "*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tmpfile.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name()) // clean up
 
-        serverURL, err := url.Parse("https://" + listener.Addr().String())
-        if err != nil {
-                t.Fatal(err)
-        }
+	os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", tmpfile.Name())
+	defer os.Unsetenv("GOOGLE_APPLICATION_CREDENTIALS")
 
-        c := NewClient(&ClientConfig{
-                URL:     serverURL,
-                Timeout: time.Second,
-        })
-        err = c.Store(&monitoring.CreateTimeSeriesRequest{
-                TimeSeries: []*monitoring.TimeSeries{
-                        &monitoring.TimeSeries{},
-                },
-        })
-        if _, recoverable := err.(recoverableError); !recoverable {
-                t.Errorf("expected recoverableError in error %v", err)
-        }
+	listener := newLocalListener()
+	grpcServer := grpc.NewServer()
+	monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
+	go grpcServer.Serve(listener)
+	defer grpcServer.Stop()
+
+	serverURL, err := url.Parse("https://" + listener.Addr().String())
+	if err != nil {
+			t.Fatal(err)
+	}
+
+	c := NewClient(&ClientConfig{
+			URL:     serverURL,
+			Timeout: time.Second,
+	})
+	err = c.Store(&monitoring.CreateTimeSeriesRequest{
+			TimeSeries: []*monitoring.TimeSeries{
+					&monitoring.TimeSeries{},
+			},
+	})
+	if _, recoverable := err.(recoverableError); recoverable {
+			t.Errorf("expected recoverableError in error %v", err)
+	}
 }
 
 func TestStoreErrorHandlingOnTimeout(t *testing.T) {
@@ -96,6 +125,33 @@ func TestStoreErrorHandlingOnTimeout(t *testing.T) {
 }
 
 func TestStoreErrorHandling(t *testing.T) {
+	str := `{
+  "type": "service_account",
+  "project_id": "mock_project_id",
+  "private_key_id": "mock_private_key_id",
+  "private_key": "mock_private_key",
+  "client_id": "mock_client_id",
+  "auth_uri": "mock_auth_uri",
+  "token_uri": "mock_token_uri",
+  "auth_provider_x509_cert_url": "mock_auth_provider_x509_cert_url",
+  "client_x509_cert_url": "mock_client_x509_cert_url"
+}`
+	content := []byte(str)
+	tmpfile, err := ioutil.TempFile("", "*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tmpfile.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name()) // clean up
+
+	os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", tmpfile.Name())
+	defer os.Unsetenv("GOOGLE_APPLICATION_CREDENTIALS")
+
 	tests := []struct {
 		status      *status.Status
 		recoverable bool
@@ -125,7 +181,7 @@ func TestStoreErrorHandling(t *testing.T) {
 			go grpcServer.Serve(listener)
 			defer grpcServer.Stop()
 
-			serverURL, err := url.Parse("https://" + listener.Addr().String() + "?auth=false")
+			serverURL, err := url.Parse("https://" + listener.Addr().String())
 			if err != nil {
 				t.Fatal(err)
 			}
